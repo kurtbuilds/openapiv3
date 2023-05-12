@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use crate::*;
-use indexmap::IndexMap;
 use http::Method;
+use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Describes the operations available on a single path.
@@ -56,7 +56,7 @@ pub struct PathItem {
 
 impl PathItem {
     /// Returns an iterator of references to the [Operation]s in the [PathItem].
-    pub fn iter(&self) -> impl Iterator<Item=(&str, &'_ Operation)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &'_ Operation)> {
         vec![
             ("get", &self.get),
             ("put", &self.put),
@@ -67,11 +67,11 @@ impl PathItem {
             ("patch", &self.patch),
             ("trace", &self.trace),
         ]
-            .into_iter()
-            .filter_map(|(method, maybe_op)| maybe_op.as_ref().map(|op| (method, op)))
+        .into_iter()
+        .filter_map(|(method, maybe_op)| maybe_op.as_ref().map(|op| (method, op)))
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item=(&str, &'_ mut Operation)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &'_ mut Operation)> {
         vec![
             ("get", &mut self.get),
             ("put", &mut self.put),
@@ -82,8 +82,8 @@ impl PathItem {
             ("patch", &mut self.patch),
             ("trace", &mut self.trace),
         ]
-            .into_iter()
-            .filter_map(|(method, maybe_op)| maybe_op.as_mut().map(|op| (method, op)))
+        .into_iter()
+        .filter_map(|(method, maybe_op)| maybe_op.as_mut().map(|op| (method, op)))
     }
 
     pub fn get(operation: Operation) -> Self {
@@ -118,10 +118,10 @@ impl IntoIterator for PathItem {
             ("patch", self.patch),
             ("trace", self.trace),
         ]
-            .into_iter()
-            .filter_map(|(method, maybe_op)| maybe_op.map(|op| (method, op)))
-            .collect::<Vec<_>>()
-            .into_iter()
+        .into_iter()
+        .filter_map(|(method, maybe_op)| maybe_op.map(|op| (method, op)))
+        .collect::<Vec<_>>()
+        .into_iter()
     }
 }
 
@@ -139,7 +139,6 @@ pub struct Paths {
     pub extensions: IndexMap<String, serde_json::Value>,
 }
 
-
 impl Paths {
     /// Iterate over path items.
     pub fn iter(&self) -> indexmap::map::Iter<String, ReferenceOr<PathItem>> {
@@ -154,9 +153,16 @@ impl Paths {
         self.paths.insert(key, ReferenceOr::Item(path_item))
     }
 
-    pub fn insert_operation(&mut self, path: String, method: Method, operation: Operation) -> Option<Operation> {
+    pub fn insert_operation(
+        &mut self,
+        path: String,
+        method: Method,
+        operation: Operation,
+    ) -> Option<Operation> {
         let item = self.paths.entry(path).or_default();
-        let item = item.as_mut().expect("Currently don't support references for PathItem");
+        let item = item
+            .as_mut()
+            .expect("Currently don't support references for PathItem");
         match method {
             Method::GET => item.get.replace(operation),
             Method::PUT => item.put.replace(operation),
@@ -184,8 +190,8 @@ impl IntoIterator for Paths {
 fn deserialize_paths<'de, D>(
     deserializer: D,
 ) -> Result<IndexMap<String, ReferenceOr<PathItem>>, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     deserializer.deserialize_map(PredicateVisitor(
         |key: &String| key.starts_with('/'),

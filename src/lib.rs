@@ -26,10 +26,10 @@ mod server_variable;
 mod status_code;
 mod tag;
 mod util;
-mod variant_or;
 #[cfg(feature = "v2")]
 #[cfg_attr(docsrs, doc(cfg(feature = "v2")))]
 pub mod v2;
+mod variant_or;
 mod versioned;
 
 pub use self::callback::*;
