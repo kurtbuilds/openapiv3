@@ -58,7 +58,7 @@ impl OpenAPI {
     /// the path, method,  and the operation.
     ///
     /// Path items containing `$ref`s are skipped.
-    pub fn operations(&self) -> impl Iterator<Item=(&str, &str, &Operation, &PathItem)> {
+    pub fn operations(&self) -> impl Iterator<Item = (&str, &str, &Operation, &PathItem)> {
         self.paths
             .iter()
             .filter_map(|(path, item)| item.as_item().map(|i| (path, i)))
@@ -68,7 +68,7 @@ impl OpenAPI {
             })
     }
 
-    pub fn operations_mut(&mut self) -> impl Iterator<Item=(&str, &str, &mut Operation)> {
+    pub fn operations_mut(&mut self) -> impl Iterator<Item = (&str, &str, &mut Operation)> {
         self.paths
             .iter_mut()
             .filter_map(|(path, item)| item.as_mut().map(|i| (path, i)))
@@ -79,7 +79,9 @@ impl OpenAPI {
     }
 
     pub fn get_operation_mut(&mut self, operation_id: &str) -> Option<&mut Operation> {
-        self.operations_mut().find(|(_, _, op)| op.operation_id.as_ref().unwrap() == operation_id).map(|(_, _, op)| op)
+        self.operations_mut()
+            .find(|(_, _, op)| op.operation_id.as_ref().unwrap() == operation_id)
+            .map(|(_, _, op)| op)
     }
 
     pub fn get_operation(&self, operation_id: &str) -> Option<(&Operation, &PathItem)> {
@@ -93,17 +95,11 @@ impl OpenAPI {
     }
 
     pub fn schemas_mut(&mut self) -> &mut IndexMap<String, ReferenceOr<Schema>> {
-        &mut self.components
-            .as_mut()
-            .unwrap()
-            .schemas
+        &mut self.components.as_mut().unwrap().schemas
     }
 
     pub fn schemas(&self) -> &IndexMap<String, ReferenceOr<Schema>> {
-        &self.components
-            .as_ref()
-            .unwrap()
-            .schemas
+        &self.components.as_ref().unwrap().schemas
     }
 
     pub fn clean(&mut self) {
@@ -112,10 +108,7 @@ impl OpenAPI {
                 continue;
             };
             match &mut schema.schema_kind {
-                SchemaKind::Type(Type::String(StringType {
-                                                  enumeration,
-                                                  ..
-                                              })) => {
+                SchemaKind::Type(Type::String(StringType { enumeration, .. })) => {
                     enumeration.sort();
                 }
                 SchemaKind::OneOf { .. } => {}
@@ -152,7 +145,10 @@ impl OpenAPI {
                 merge_map(&mut self_item.extensions, item.extensions);
 
                 if self_item.parameters.len() != item.parameters.len() {
-                    return Err(MergeError(format!("PathItem {} parameters do not have the same length", path)));
+                    return Err(MergeError(format!(
+                        "PathItem {} parameters do not have the same length",
+                        path
+                    )));
                 }
                 for (a, b) in self_item.parameters.iter_mut().zip(item.parameters) {
                     let a = a.as_item().ok_or_else(|| MergeError::new("Parameter references are not yet supported. Please open an issue if you need this feature."))?;
@@ -160,7 +156,10 @@ impl OpenAPI {
                     let a = a.parameter_data_ref();
                     let b = b.parameter_data_ref();
                     if a.name != b.name {
-                        return Err(MergeError(format!("PathItem {} parameter {} does not have the same name as {}", path, a.name, b.name)));
+                        return Err(MergeError(format!(
+                            "PathItem {} parameter {} does not have the same name as {}",
+                            path, a.name, b.name
+                        )));
                     }
                 }
             } else {
@@ -170,22 +169,32 @@ impl OpenAPI {
 
         if self.components.is_none() {
             self.components = other.components
-        } else if let (Some(self_components), Some(other_components)) = (&mut self.components, other.components) {
+        } else if let (Some(self_components), Some(other_components)) =
+            (&mut self.components, other.components)
+        {
             merge_map(&mut self_components.extensions, other_components.extensions);
             merge_map(&mut self_components.schemas, other_components.schemas);
             merge_map(&mut self_components.responses, other_components.responses);
             merge_map(&mut self_components.parameters, other_components.parameters);
             merge_map(&mut self_components.examples, other_components.examples);
-            merge_map(&mut self_components.request_bodies, other_components.request_bodies);
+            merge_map(
+                &mut self_components.request_bodies,
+                other_components.request_bodies,
+            );
             merge_map(&mut self_components.headers, other_components.headers);
-            merge_map(&mut self_components.security_schemes, other_components.security_schemes);
+            merge_map(
+                &mut self_components.security_schemes,
+                other_components.security_schemes,
+            );
             merge_map(&mut self_components.links, other_components.links);
             merge_map(&mut self_components.callbacks, other_components.callbacks);
         }
 
         if self.security.is_none() {
             self.security = other.security;
-        } else if let (Some(self_security), Some(other_security)) = (&mut self.security, other.security) {
+        } else if let (Some(self_security), Some(other_security)) =
+            (&mut self.security, other.security)
+        {
             merge_vec(self_security, other_security, |a, b| {
                 if a.len() != b.len() {
                     return false;
@@ -202,7 +211,7 @@ impl OpenAPI {
                     merge_map(&mut ext.extensions, other.extensions)
                 }
             }
-            None => self.external_docs = other.external_docs
+            None => self.external_docs = other.external_docs,
         }
 
         merge_map(&mut self.extensions, other.extensions);
@@ -216,7 +225,8 @@ impl OpenAPI {
     }
 
     pub fn add_schema(&mut self, name: &str, schema: Schema) {
-        self.schemas_mut().insert(name.to_string(), ReferenceOr::Item(schema));
+        self.schemas_mut()
+            .insert(name.to_string(), ReferenceOr::Item(schema));
     }
 }
 
@@ -242,7 +252,10 @@ fn merge_vec<T>(original: &mut Vec<T>, mut other: Vec<T>, cmp: fn(&T, &T) -> boo
     original.extend(other);
 }
 
-fn merge_map<K, V>(original: &mut IndexMap<K, V>, mut other: IndexMap<K, V>) where K: Eq + std::hash::Hash {
+fn merge_map<K, V>(original: &mut IndexMap<K, V>, mut other: IndexMap<K, V>)
+where
+    K: Eq + std::hash::Hash,
+{
     other.retain(|k, _| !original.contains_key(k));
     original.extend(other);
 }
@@ -269,7 +282,6 @@ impl std::fmt::Display for MergeError {
         write!(f, "{}", self.0)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

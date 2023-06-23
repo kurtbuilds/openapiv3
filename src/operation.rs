@@ -73,25 +73,34 @@ pub struct Operation {
 
 impl Operation {
     pub fn add_response_success_json(&mut self, schema: Option<ReferenceOr<Schema>>) {
-        self.responses.responses.insert(StatusCode::Code(200), ReferenceOr::Item({
-            let mut content = indexmap::IndexMap::new();
-            content.insert("application/json".to_string(), MediaType {
-                schema,
-                ..MediaType::default()
-            });
-            Response {
-                content,
-                ..Response::default()
-            }
-        }));
+        self.responses.responses.insert(
+            StatusCode::Code(200),
+            ReferenceOr::Item({
+                let mut content = indexmap::IndexMap::new();
+                content.insert(
+                    "application/json".to_string(),
+                    MediaType {
+                        schema,
+                        ..MediaType::default()
+                    },
+                );
+                Response {
+                    content,
+                    ..Response::default()
+                }
+            }),
+        );
     }
 
     pub fn add_request_body_json(&mut self, schema: Option<ReferenceOr<Schema>>) {
         let mut content = indexmap::IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema,
-            ..MediaType::default()
-        });
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema,
+                ..MediaType::default()
+            },
+        );
         self.request_body = Some(ReferenceOr::Item(RequestBody {
             content,
             required: true,

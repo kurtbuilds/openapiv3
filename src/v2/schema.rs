@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
 // http://json.schemastore.org/swagger-2.0
 
@@ -186,12 +186,17 @@ pub struct Operation {
 pub type SecurityRequirement = IndexMap<String, Vec<String>>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+// #[serde(rename_all = "lowercase")]
 pub enum ParameterLocation {
+    #[serde(rename = "query")]
     Query,
+    #[serde(rename = "header")]
     Header,
+    #[serde(rename = "path")]
     Path,
+    #[serde(rename = "formData")]
     FormData,
+    #[serde(rename = "body")]
     Body,
 }
 
@@ -361,7 +366,7 @@ mod tests {
                 location: serde_json::from_str("\"query\"").unwrap(),
                 description: None,
             })
-                .unwrap(),
+            .unwrap(),
             json
         );
     }
@@ -415,7 +420,7 @@ mod tests {
                 scopes,
                 description: None,
             })
-                .unwrap()
+            .unwrap()
         );
     }
 
@@ -438,7 +443,7 @@ mod tests {
             serde_json::to_string(&ReferenceOrSchema::Reference {
                 reference: "foo/bar".into()
             })
-                .unwrap()
+            .unwrap()
         );
     }
 }
