@@ -133,6 +133,19 @@ impl<T> ReferenceOr<T> {
             ReferenceOr::Item(i) => Some(i),
         }
     }
+
+    /// Borrows the item if it is not a reference, or produces an error explaining the problem.
+    ///
+    /// This is intended to produce a consistent error message when references refer to references.
+    fn item_or_err(&self, reference: &str) -> Result<&T> {
+        match self {
+            ReferenceOr::Item(item) => Ok(item),
+            ReferenceOr::Reference { reference: ref_ } => Err(anyhow!(
+                "reference {reference} refers to {ref_}"
+            )
+            .context("references must refer directly to the definition; chains are not permitted")),
+        }
+    }
 }
 
 impl<T: 'static> ReferenceOr<T> {
@@ -204,22 +217,15 @@ impl Resolve for ReferenceOr<Schema> {
             ReferenceOr::Item(item) => return Ok(item),
             ReferenceOr::Reference { reference } => reference,
         };
-        let reference = SchemaReference::from_str(reference)?;
+        let schema_ref = SchemaReference::from_str(reference)?;
         let get_schema = |schema: &str| -> Result<&Schema> {
             let schema_ref = spec
                 .schemas()
                 .get(schema)
                 .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
-            schema_ref.as_item().ok_or_else(|| {
-                let ref_ = schema_ref
-                    .as_ref_str()
-                    .expect("schema_ref was not item so must be ref");
-                anyhow!("reference {reference} refers to {ref_}").context(
-                    "references must refer directly to the definition; chains are not permitted",
-                )
-            })
+            schema_ref.item_or_err(reference)
         };
-        match &reference {
+        match &schema_ref {
             SchemaReference::Schema { schema } => get_schema(schema),
             SchemaReference::Property {
                 schema: schema_name,
@@ -252,12 +258,7 @@ impl Resolve for ReferenceOr<Parameter> {
                     .parameters
                     .get(name)
                     .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
-                param_ref
-                    .as_item()
-                    .ok_or_else(|| {
-                        let ref_ = param_ref.as_ref_str().expect("param_ref was not item so must be ref");
-                        anyhow!("reference {reference} refers to {ref_}").context("references must refer directly to the definition; chains are not permitted")
-                    })
+                param_ref.item_or_err(reference)
             }
         }
     }
@@ -279,12 +280,7 @@ impl Resolve for ReferenceOr<Response> {
                     .responses
                     .get(name)
                     .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
-                response_ref
-                    .as_item()
-                    .ok_or_else(|| {
-                        let ref_ = response_ref.as_ref_str().expect("response_ref was not item so must be ref");
-                        anyhow!("reference {reference} refers to {ref_}").context("references must refer directly to the definition; chains are not permitted")
-                    })
+                response_ref.item_or_err(reference)
             }
         }
     }
@@ -306,12 +302,7 @@ impl Resolve for ReferenceOr<RequestBody> {
                     .request_bodies
                     .get(name)
                     .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
-                request_body_ref
-                    .as_item()
-                    .ok_or_else(|| {
-                        let ref_ = request_body_ref.as_ref_str().expect("request_body_ref was not item so must be ref");
-                        anyhow!("reference {reference} refers to {ref_}").context("references must refer directly to the definition; chains are not permitted")
-                    })
+                request_body_ref.item_or_err(reference)
             }
         }
     }
