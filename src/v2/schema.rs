@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
 // http://json.schemastore.org/swagger-2.0
 
@@ -361,7 +361,7 @@ mod tests {
                 location: serde_json::from_str("\"query\"").unwrap(),
                 description: None,
             })
-                .unwrap(),
+            .unwrap(),
             json
         );
     }
@@ -395,7 +395,7 @@ mod tests {
                 flow: Flow::Implicit,
                 authorization_url: "foo/bar".into(),
                 token_url: None,
-                scopes: scopes,
+                scopes,
                 description: None,
             }
         );
@@ -415,7 +415,7 @@ mod tests {
                 scopes,
                 description: None,
             })
-                .unwrap()
+            .unwrap()
         );
     }
 
@@ -438,7 +438,7 @@ mod tests {
             serde_json::to_string(&ReferenceOrSchema::Reference {
                 reference: "foo/bar".into()
             })
-                .unwrap()
+            .unwrap()
         );
     }
 }

@@ -1,7 +1,7 @@
 use crate::*;
+use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use anyhow::{anyhow, Result};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -66,7 +66,6 @@ pub enum SchemaKind {
     Any(AnySchema),
 }
 
-
 impl Schema {
     pub fn new_number() -> Self {
         Self {
@@ -125,7 +124,7 @@ impl Schema {
     pub fn new_any_array() -> Self {
         Self {
             schema_data: SchemaData::default(),
-            schema_kind: SchemaKind::Type(Type::Array(ArrayType::default()))
+            schema_kind: SchemaKind::Type(Type::Array(ArrayType::default())),
         }
     }
 
@@ -135,7 +134,7 @@ impl Schema {
             schema_kind: SchemaKind::Type(Type::Array(ArrayType {
                 items: Some(ReferenceOr::boxed_item(inner)),
                 ..ArrayType::default()
-            }))
+            })),
         }
     }
 
@@ -158,7 +157,9 @@ impl Schema {
 
     pub fn add_property(&mut self, s: &str, schema: Schema) -> Result<()> {
         if let SchemaKind::Type(Type::Object(object_type)) = &mut self.schema_kind {
-            object_type.properties.insert(s.to_string(), ReferenceOr::Item(schema));
+            object_type
+                .properties
+                .insert(s.to_string(), ReferenceOr::Item(schema));
             Ok(())
         } else {
             Err(anyhow!("Schema is not an object"))
@@ -167,7 +168,9 @@ impl Schema {
 
     pub fn add_property_ref(&mut self, s: &str, reference: &str) -> Result<()> {
         if let SchemaKind::Type(Type::Object(object_type)) = &mut self.schema_kind {
-            object_type.properties.insert(s.to_string(), ReferenceOr::schema_ref(reference));
+            object_type
+                .properties
+                .insert(s.to_string(), ReferenceOr::schema_ref(reference));
             Ok(())
         } else {
             Err(anyhow!("Schema is not an object"))
@@ -392,7 +395,6 @@ impl VariantOrUnknownOrEmpty<StringFormat> {
     }
 }
 
-
 impl Schema {
     pub fn properties(&self) -> Option<&IndexMap<String, ReferenceOr<Schema>>> {
         match &self.schema_kind {
@@ -402,14 +404,17 @@ impl Schema {
         }
     }
 
-    pub fn properties_iter<'a>(&'a self, spec: &'a OpenAPI) -> Result<Box<dyn Iterator<Item=(&'a String, &'a ReferenceOr<Schema>)> + 'a>> {
+    pub fn properties_iter<'a>(
+        &'a self,
+        spec: &'a OpenAPI,
+    ) -> Result<Box<dyn Iterator<Item = (&'a String, &'a ReferenceOr<Schema>)> + 'a>> {
         match &self.schema_kind {
             SchemaKind::Type(Type::Object(o)) => Ok(Box::new(o.properties.iter())),
             SchemaKind::Any(AnySchema { properties, .. }) => Ok(Box::new(properties.iter())),
             SchemaKind::AllOf { all_of } => {
                 let mut vec = Vec::new();
                 for schema in all_of {
-                    let schema = schema.resolve(spec).properties_iter(spec)?;
+                    let schema = schema.resolve(spec)?.properties_iter(spec)?;
                     vec.extend(schema);
                 }
                 Ok(Box::new(vec.into_iter()))
@@ -421,7 +426,9 @@ impl Schema {
     pub fn properties_mut(&mut self) -> Option<&mut IndexMap<String, ReferenceOr<Schema>>> {
         match &mut self.schema_kind {
             SchemaKind::Type(Type::Object(ref mut o)) => Some(&mut o.properties),
-            SchemaKind::Any(AnySchema { ref mut properties, .. }) => Some(properties),
+            SchemaKind::Any(AnySchema {
+                ref mut properties, ..
+            }) => Some(properties),
             _ => None,
         }
     }
@@ -437,7 +444,9 @@ impl Schema {
     pub fn required_mut(&mut self) -> Option<&mut Vec<String>> {
         match &mut self.schema_kind {
             SchemaKind::Type(Type::Object(ref mut o)) => Some(&mut o.required),
-            SchemaKind::Any(AnySchema { ref mut required, .. }) => Some(required),
+            SchemaKind::Any(AnySchema {
+                ref mut required, ..
+            }) => Some(required),
             _ => None,
         }
     }
@@ -452,8 +461,10 @@ impl Schema {
                 } else {
                     o.required.retain(|s| s != field);
                 }
-            },
-            SchemaKind::Any(AnySchema { ref mut required, .. }) => {
+            }
+            SchemaKind::Any(AnySchema {
+                ref mut required, ..
+            }) => {
                 if is_required {
                     if !required.iter().any(|s| s == field) {
                         required.push(field.to_string());
@@ -461,8 +472,8 @@ impl Schema {
                 } else {
                     required.retain(|s| s != field);
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -489,7 +500,7 @@ mod tests {
                 "x-foo": "bar"
             }"#,
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(
             schema.schema_data.extensions.get("x-foo"),
@@ -555,7 +566,11 @@ properties:
 "##.trim();
         let s = serde_yaml::from_str::<Schema>(s).unwrap();
         // assert!(matches!(s.schema_kind, SchemaKind::Type(crate::Type::Object(_))), "Schema kind was not expected {:?}", s.schema_kind);
-        assert!(matches!(s.schema_kind, SchemaKind::Any(crate::AnySchema{ ref properties, ..}) if properties.len() == 2), "Schema kind was not expected {:?}", s.schema_kind);
+        assert!(
+            matches!(s.schema_kind, SchemaKind::Any(crate::AnySchema{ ref properties, ..}) if properties.len() == 2),
+            "Schema kind was not expected {:?}",
+            s.schema_kind
+        );
     }
 
     #[test]
@@ -564,15 +579,22 @@ properties:
 allOf:
   - $ref: "#/components/schemas/DocumentationRequest"
   - $ref: "#/components/schemas/PreviewRequest"
-        "##.trim();
+        "##
+        .trim();
         let s = serde_yaml::from_str::<Schema>(s).unwrap();
         match &s.schema_kind {
             SchemaKind::AllOf { all_of } => {
                 assert_eq!(all_of.len(), 2);
-                assert!(matches!(all_of[0].as_ref_str(), Some("#/components/schemas/DocumentationRequest")));
-                assert!(matches!(all_of[1].as_ref_str(), Some("#/components/schemas/PreviewRequest")));
+                assert!(matches!(
+                    all_of[0].as_ref_str(),
+                    Some("#/components/schemas/DocumentationRequest")
+                ));
+                assert!(matches!(
+                    all_of[1].as_ref_str(),
+                    Some("#/components/schemas/PreviewRequest")
+                ));
             }
-            _ => panic!("Schema kind was not expected {:?}", s.schema_kind)
+            _ => panic!("Schema kind was not expected {:?}", s.schema_kind),
         }
     }
 
@@ -581,12 +603,13 @@ allOf:
         use crate::variant_or::VariantOrUnknownOrEmpty;
         let s = Schema::new_string().with_format("date-time");
         let SchemaKind::Type(crate::Type::String(s)) = s.schema_kind else { panic!() };
-        assert_matches!(s.format, VariantOrUnknownOrEmpty::Item(crate::StringFormat::DateTime));
+        assert_matches!(
+            s.format,
+            VariantOrUnknownOrEmpty::Item(crate::StringFormat::DateTime)
+        );
 
         let s = Schema::new_string().with_format("uuid");
         let SchemaKind::Type(crate::Type::String(s)) = s.schema_kind else { panic!() };
         assert_matches!(s.format, VariantOrUnknownOrEmpty::Unknown(s) if s == "uuid");
-
     }
 }
-
