@@ -1,51 +1,44 @@
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+
 use crate::{OpenAPI, Parameter, RequestBody, Response, Schema};
+use anyhow::{anyhow, bail, Result};
+use serde::{Deserialize, Serialize};
 
 /// A structured enum of an OpenAPI reference.
 /// e.g. #/components/schemas/Account or #/components/schemas/Account/properties/name
 pub enum SchemaReference {
-    Schema {
-        schema: String,
-    },
-    Property {
-        schema: String,
-        property: String,
-    },
+    Schema { schema: String },
+    Property { schema: String, property: String },
 }
 
-impl SchemaReference {
-    pub fn from_str(reference: &str) -> Self {
-        let mut ns = reference.rsplit('/');
-        let name = ns.next().unwrap();
-        match ns.next().unwrap() {
-            "schemas" => {
-                Self::Schema {
-                    schema: name.to_string(),
-                }
-            }
-            "properties" => {
-                let schema_name = ns.next().unwrap();
-                Self::Property {
-                    schema: schema_name.to_string(),
-                    property: name.to_string(),
-                }
-            }
-            _ => panic!("Unknown reference: {}", reference),
+impl FromStr for SchemaReference {
+    type Err = anyhow::Error;
+
+    fn from_str(reference: &str) -> Result<Self> {
+        let components = reference.split('/').collect::<Vec<_>>();
+        match components.as_slice() {
+            ["#", "components", "schemas", schema] => Ok(Self::Schema {
+                schema: (*schema).to_owned(),
+            }),
+            ["#", "components", "schemas", schema, "properties", property] => Ok(Self::Property {
+                schema: (*schema).to_owned(),
+                property: (*property).to_owned(),
+            }),
+            _ => bail!("malformed reference; {reference} cannot be parsed as SchemaReference"),
         }
     }
 }
-
 
 impl std::fmt::Display for SchemaReference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SchemaReference::Schema { schema } => write!(f, "#/components/schemas/{}", schema),
-            SchemaReference::Property { schema, property } => write!(f, "#/components/schemas/{}/properties/{}", schema, property),
+            SchemaReference::Property { schema, property } => {
+                write!(f, "#/components/schemas/{}/properties/{}", schema, property)
+            }
         }
     }
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
@@ -74,8 +67,8 @@ impl<T> ReferenceOr<T> {
 
     pub fn boxed(self) -> ReferenceOr<Box<T>> {
         match self {
-            ReferenceOr::Reference { reference } => ReferenceOr::Reference{ reference },
-            ReferenceOr::Item(i) => ReferenceOr::Item(Box::new(i))
+            ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference },
+            ReferenceOr::Item(i) => ReferenceOr::Item(Box::new(i)),
         }
     }
 
@@ -140,50 +133,33 @@ impl<T> ReferenceOr<T> {
             ReferenceOr::Item(i) => Some(i),
         }
     }
+
+    /// Borrows the item if it is not a reference, or produces an error explaining the problem.
+    ///
+    /// This is intended to produce a consistent error message when references refer to references.
+    fn item_or_err(&self, reference: &str) -> Result<&T> {
+        match self {
+            ReferenceOr::Item(item) => Ok(item),
+            ReferenceOr::Reference { reference: ref_ } => Err(anyhow!(
+                "reference {reference} refers to {ref_}"
+            )
+            .context("references must refer directly to the definition; chains are not permitted")),
+        }
+    }
 }
 
 impl<T: 'static> ReferenceOr<T> {
     pub fn as_ref(&self) -> ReferenceOr<&T> {
         match self {
-            ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+            ReferenceOr::Reference { reference } => ReferenceOr::Reference {
+                reference: reference.clone(),
+            },
             ReferenceOr::Item(i) => ReferenceOr::Item(i),
         }
     }
 }
 
-
 impl ReferenceOr<Schema> {
-    pub fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> &'a Schema {
-        match self {
-            ReferenceOr::Reference { reference } => {
-                let reference = SchemaReference::from_str(&reference);
-                match &reference {
-                    SchemaReference::Schema { ref schema } => {
-                        let schema_ref = spec.schemas().get(schema)
-                            .expect(&format!("Schema {} not found in OpenAPI spec.", schema));
-                        // In theory both this as_item and the one below could have continue to be references
-                        // but assum
-                        schema_ref.as_item()
-                            .expect(&format!("The schema {} was used in a reference, but that schema is itself a reference to another schema.", schema))
-                    }
-                    SchemaReference::Property { schema: ref schema_name, ref property } => {
-                        let schema = spec.schemas().get(schema_name)
-                            .expect(&format!("Schema {} not found in OpenAPI spec.", schema_name))
-                            .as_item()
-                            .expect(&format!("The schema {} was used in a reference, but that schema is itself a reference to another schema.", schema_name));
-                        let prop_schema = schema
-                            .properties()
-                            .expect(&format!("Tried to resolve reference {}, but {} is not an object with properties.", reference, schema_name))
-                            .get(property)
-                            .expect(&format!("Schema {} does not have property {}.", schema_name, property));
-                        prop_schema.resolve(spec)
-                    }
-                }
-            }
-            ReferenceOr::Item(schema) => schema,
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
         self.as_item().map(|s| s.is_empty()).unwrap_or(false)
     }
@@ -192,42 +168,25 @@ impl ReferenceOr<Schema> {
 impl ReferenceOr<Box<Schema>> {
     pub fn unbox(&self) -> ReferenceOr<Schema> {
         match self {
-            ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+            ReferenceOr::Reference { reference } => ReferenceOr::Reference {
+                reference: reference.clone(),
+            },
             ReferenceOr::Item(boxed) => ReferenceOr::Item(*boxed.clone()),
         }
     }
 }
 
-
-impl ReferenceOr<Parameter> {
-    pub fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Parameter> {
-        match self {
-            ReferenceOr::Reference { reference } => {
-                let name = get_parameter_name(&reference)?;
-                let components = spec.components.as_ref().unwrap();
-                components.parameters.get(name)
-                    .ok_or(anyhow!("{} not found in OpenAPI spec.", reference))?
-                    .as_item()
-                    .ok_or(anyhow!("{} is circular.", reference))
-            }
-            ReferenceOr::Item(parameter) => Ok(parameter),
-        }
-    }
-}
-
-
 fn parse_reference<'a>(reference: &'a str, group: &str) -> Result<&'a str> {
-    let mut parts = reference.rsplitn(2, '/');
-    let name = parts.next();
-    name.filter(|_| matches!(parts.next(), Some(x) if format!("#/components/{group}") == x))
-        .ok_or(anyhow!("Invalid {} reference: {}", group, reference))
+    reference
+        .rsplit_once('/')
+        .filter(|(head, _name)| head.strip_prefix("#/components/") == Some(group))
+        .map(|(_head, name)| name)
+        .ok_or_else(|| anyhow!("invalid {} reference: {}", group, reference))
 }
-
 
 fn get_response_name(reference: &str) -> Result<&str> {
     parse_reference(reference, "responses")
 }
-
 
 fn get_request_body_name(reference: &str) -> Result<&str> {
     parse_reference(reference, "requestBodies")
@@ -237,43 +196,115 @@ fn get_parameter_name(reference: &str) -> Result<&str> {
     parse_reference(reference, "parameters")
 }
 
-impl ReferenceOr<Response> {
-    pub fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Response> {
-        match self {
-            ReferenceOr::Reference { reference } => {
-                let name = get_response_name(&reference)?;
-                let components = spec.components.as_ref().unwrap();
-                components.responses.get(name)
-                    .ok_or(anyhow!("{} not found in OpenAPI spec.", reference))?
-                    .as_item()
-                    .ok_or(anyhow!("{} is circular.", reference))
-            }
-            ReferenceOr::Item(response) => Ok(response),
-        }
-    }
-}
-
-
-impl ReferenceOr<RequestBody> {
-    pub fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a RequestBody> {
-        match self {
-            ReferenceOr::Reference { reference } => {
-                let name = get_request_body_name(&reference)?;
-                let components = spec.components.as_ref().unwrap();
-                components.request_bodies.get(name)
-                    .ok_or(anyhow!("{} not found in OpenAPI spec.", reference))?
-                    .as_item()
-                    .ok_or(anyhow!("{} is circular.", reference))
-            }
-            ReferenceOr::Item(request_body) => Ok(request_body),
-        }
-    }
-}
-
-
 impl<T: Default> Default for ReferenceOr<T> {
     fn default() -> Self {
         ReferenceOr::Item(T::default())
+    }
+}
+
+/// Abstract over types which can potentially resolve a contained type, given an `OpenAPI` instance.
+pub trait Resolve {
+    type Output;
+
+    fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Self::Output>;
+}
+
+impl Resolve for ReferenceOr<Schema> {
+    type Output = Schema;
+
+    fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Self::Output> {
+        let reference = match self {
+            ReferenceOr::Item(item) => return Ok(item),
+            ReferenceOr::Reference { reference } => reference,
+        };
+        let schema_ref = SchemaReference::from_str(reference)?;
+        let get_schema = |schema: &str| -> Result<&Schema> {
+            let schema_ref = spec
+                .schemas()
+                .get(schema)
+                .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
+            schema_ref.item_or_err(reference)
+        };
+        match &schema_ref {
+            SchemaReference::Schema { schema } => get_schema(schema),
+            SchemaReference::Property {
+                schema: schema_name,
+                property,
+            } => {
+                let schema = get_schema(schema_name)?;
+                schema
+                    .properties()
+                    .ok_or_else(|| anyhow!("tried to resolve reference {reference}, but {schema_name} is not an object with properties"))?
+                    .get(property).ok_or_else(|| anyhow!("schema {schema_name} lacks property {property}"))?
+                    .resolve(spec)
+            }
+        }
+    }
+}
+
+impl Resolve for ReferenceOr<Parameter> {
+    type Output = Parameter;
+
+    fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Self::Output> {
+        match self {
+            ReferenceOr::Item(item) => Ok(item),
+            ReferenceOr::Reference { reference } => {
+                let name = get_parameter_name(reference)?;
+                let components = spec
+                    .components
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("no components in spec"))?;
+                let param_ref = components
+                    .parameters
+                    .get(name)
+                    .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
+                param_ref.item_or_err(reference)
+            }
+        }
+    }
+}
+
+impl Resolve for ReferenceOr<Response> {
+    type Output = Response;
+
+    fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Self::Output> {
+        match self {
+            ReferenceOr::Item(item) => Ok(item),
+            ReferenceOr::Reference { reference } => {
+                let name = get_response_name(reference)?;
+                let components = spec
+                    .components
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("no components in spec"))?;
+                let response_ref = components
+                    .responses
+                    .get(name)
+                    .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
+                response_ref.item_or_err(reference)
+            }
+        }
+    }
+}
+
+impl Resolve for ReferenceOr<RequestBody> {
+    type Output = RequestBody;
+
+    fn resolve<'a>(&'a self, spec: &'a OpenAPI) -> Result<&'a Self::Output> {
+        match self {
+            ReferenceOr::Item(item) => Ok(item),
+            ReferenceOr::Reference { reference } => {
+                let name = get_request_body_name(reference)?;
+                let components = spec
+                    .components
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("no components in spec"))?;
+                let request_body_ref = components
+                    .request_bodies
+                    .get(name)
+                    .ok_or_else(|| anyhow!("{reference} not found in OpenAPI spec"))?;
+                request_body_ref.item_or_err(reference)
+            }
+        }
     }
 }
 
@@ -283,7 +314,10 @@ mod tests {
 
     #[test]
     fn test_get_request_body_name() {
-        assert!(matches!(get_request_body_name("#/components/requestBodies/Foo"), Ok("Foo")));
+        assert!(matches!(
+            get_request_body_name("#/components/requestBodies/Foo"),
+            Ok("Foo")
+        ));
         assert!(get_request_body_name("#/components/schemas/Foo").is_err());
     }
 }
