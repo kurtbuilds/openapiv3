@@ -147,11 +147,15 @@ pub enum ParameterKind {
 
 impl Parameter {
     fn new_kind(name: String, schema: RefOr<Schema>, kind: ParameterKind) -> Self {
+        let required = match kind {
+            ParameterKind::Path { style: _ } => true,
+            _ => false,
+        };
         Parameter {
             data: ParameterData {
                 name,
                 description: None,
-                required: false,
+                required,
                 deprecated: None,
                 format: ParameterSchemaOrContent::Schema(schema),
                 example: None,

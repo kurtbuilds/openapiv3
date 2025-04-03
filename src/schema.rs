@@ -391,6 +391,10 @@ impl Schema {
     pub fn get_properties_mut(&mut self) -> Option<&mut RefOrMap<Schema>> {
         match &mut self.kind {
             SchemaKind::Type(Type::Object(ref mut o)) => Some(&mut o.properties),
+            SchemaKind::Type(Type::Array(ref mut a)) => a
+                .items
+                .as_mut()
+                .map(|s| s.as_mut().as_mut().unwrap().properties_mut()),
             SchemaKind::Any(AnySchema { ref mut properties, .. }) => Some(properties),
             _ => None,
         }
@@ -435,6 +439,10 @@ impl Schema {
     pub fn get_required_mut(&mut self) -> Option<&mut Vec<String>> {
         match &mut self.kind {
             SchemaKind::Type(Type::Object(ref mut o)) => Some(&mut o.required),
+            SchemaKind::Type(Type::Array(ref mut a)) => a
+                .items
+                .as_mut()
+                .map(|s| s.as_mut().as_mut().unwrap().get_required_mut().unwrap()),
             SchemaKind::Any(AnySchema { ref mut required, .. }) => Some(required),
             _ => None,
         }
