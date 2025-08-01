@@ -1,6 +1,7 @@
 use crate::*;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use axum::http::StatusCode as AxumStatusCode;
 
 /// Describes a single API operation on a path.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -72,8 +73,19 @@ pub struct Operation {
 }
 
 impl Operation {
+    pub fn add_response_error_json(&mut self, status: StatusCode, message: String) {
+        self.responses.responses.insert(status, RefOr::Item({
+            Response {
+                description: message,
+                // for errors, leave content empty
+                content: indexmap::IndexMap::new(),
+                ..Response::default()
+            }
+        }));
+    }
+
     pub fn add_response_success_json(&mut self, schema: Option<RefOr<Schema>>) {
-        self.responses.responses.insert(StatusCode::Code(200), RefOr::Item({
+        self.responses.responses.insert(Self::axum_to_local_status(axum::http::StatusCode::OK), RefOr::Item({
             let mut content = indexmap::IndexMap::new();
             content.insert("application/json".to_string(), MediaType {
                 schema,
@@ -98,6 +110,11 @@ impl Operation {
             ..RequestBody::default()
         }));
     }
+
+    fn axum_to_local_status(status: AxumStatusCode) -> StatusCode {
+        StatusCode::Code(status.as_u16())
+    }
+  
 }
 
 #[cfg(test)]
@@ -114,7 +131,7 @@ mod tests {
                     default: None,
                     responses: {
                         let mut map = IndexMap::new();
-                        map.insert(StatusCode::Code(200), RefOr::ref_("test"));
+                        map.insert(axum::http::StatusCode::OK.as_u16(), RefOr::ref_("test"));
                         map
                     },
                     ..Default::default()
