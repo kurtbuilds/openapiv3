@@ -83,7 +83,7 @@ impl Operation {
             }
         }));
     }
-
+    
     pub fn add_response_success_json(&mut self, schema: Option<RefOr<Schema>>) {
         self.responses.responses.insert(Self::axum_to_local_status(axum::http::StatusCode::OK), RefOr::Item({
             let mut content = indexmap::IndexMap::new();
@@ -92,6 +92,7 @@ impl Operation {
                 ..MediaType::default()
             });
             Response {
+                description: "OK".to_string(),
                 content,
                 ..Response::default()
             }
