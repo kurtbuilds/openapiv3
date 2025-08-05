@@ -1,7 +1,6 @@
 use crate::*;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use axum::http::StatusCode as AxumStatusCode;
 
 /// Describes a single API operation on a path.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -73,38 +72,48 @@ pub struct Operation {
 }
 
 impl Operation {
-    pub fn add_response_error_json(&mut self, status: StatusCode, message: String) {
-        self.responses.responses.insert(status, RefOr::Item({
-            Response {
+    pub fn add_response_error_json(&mut self, status: u16, message: String) {
+        let status_code_enum = StatusCode::Code(status);
+        self.responses.responses.insert(
+            status_code_enum, // OpenAPI keys are strings
+            RefOr::Item(Response {
                 description: message,
-                // for errors, leave content empty
-                content: indexmap::IndexMap::new(),
+                content: IndexMap::new(),
                 ..Response::default()
-            }
-        }));
+            }),
+        );
     }
-    
+
     pub fn add_response_success_json(&mut self, schema: Option<RefOr<Schema>>) {
-        self.responses.responses.insert(Self::axum_to_local_status(axum::http::StatusCode::OK), RefOr::Item({
-            let mut content = indexmap::IndexMap::new();
-            content.insert("application/json".to_string(), MediaType {
-                schema,
-                ..MediaType::default()
-            });
-            Response {
-                description: "OK".to_string(),
-                content,
-                ..Response::default()
-            }
-        }));
+        self.responses.responses.insert(
+            StatusCode::Code(200),
+            RefOr::Item({
+                let mut content = indexmap::IndexMap::new();
+                content.insert(
+                    "application/json".to_string(),
+                    MediaType {
+                        schema,
+                        ..MediaType::default()
+                    },
+                );
+                Response {
+                    description: "OK".to_string(),
+                    content,
+                    ..Response::default()
+                }
+            }),
+        );
     }
 
     pub fn add_request_body_json(&mut self, schema: Option<RefOr<Schema>>) {
         let mut content = indexmap::IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema,
-            ..MediaType::default()
-        });
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema,
+                ..MediaType::default()
+            },
+        );
         self.request_body = Some(RefOr::Item(RequestBody {
             content,
             required: true,
@@ -112,10 +121,9 @@ impl Operation {
         }));
     }
 
-    fn axum_to_local_status(status: AxumStatusCode) -> StatusCode {
-        StatusCode::Code(status.as_u16())
-    }
-  
+    //fn axum_to_local_status(status: AxumStatusCode) -> StatusCode {
+    //StatusCode::Code(status.as_u16())
+    //}
 }
 
 #[cfg(test)]
