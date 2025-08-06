@@ -121,9 +121,6 @@ impl Operation {
         }));
     }
 
-    //fn axum_to_local_status(status: AxumStatusCode) -> StatusCode {
-    //StatusCode::Code(status.as_u16())
-    //}
 }
 
 #[cfg(test)]
