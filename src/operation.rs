@@ -120,7 +120,6 @@ impl Operation {
             ..RequestBody::default()
         }));
     }
-
 }
 
 #[cfg(test)]
@@ -137,7 +136,7 @@ mod tests {
                     default: None,
                     responses: {
                         let mut map = IndexMap::new();
-                        map.insert(axum::http::StatusCode::OK.as_u16(), RefOr::ref_("test"));
+                        map.insert(StatusCode::Code(200), RefOr::ref_("test"));
                         map
                     },
                     ..Default::default()
