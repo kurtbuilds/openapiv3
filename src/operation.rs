@@ -72,32 +72,55 @@ pub struct Operation {
 }
 
 impl Operation {
-    pub fn add_response_success_json(&mut self, schema: Option<RefOr<Schema>>) {
-        self.responses.responses.insert(StatusCode::Code(200), RefOr::Item({
-            let mut content = indexmap::IndexMap::new();
-            content.insert("application/json".to_string(), MediaType {
-                schema,
-                ..MediaType::default()
-            });
-            Response {
-                content,
+    pub fn add_response_error_json(&mut self, status: u16, message: String) {
+        let status_code_enum = StatusCode::Code(status);
+        self.responses.responses.insert(
+            status_code_enum, // OpenAPI keys are strings
+            RefOr::Item(Response {
+                description: message,
+                content: IndexMap::new(),
                 ..Response::default()
-            }
-        }));
+            }),
+        );
+    }
+
+    pub fn add_response_success_json(&mut self, schema: Option<RefOr<Schema>>) {
+        self.responses.responses.insert(
+            StatusCode::Code(200),
+            RefOr::Item({
+                let mut content = indexmap::IndexMap::new();
+                content.insert(
+                    "application/json".to_string(),
+                    MediaType {
+                        schema,
+                        ..MediaType::default()
+                    },
+                );
+                Response {
+                    description: "OK".to_string(),
+                    content,
+                    ..Response::default()
+                }
+            }),
+        );
     }
 
     pub fn add_request_body_json(&mut self, schema: Option<RefOr<Schema>>) {
         let mut content = indexmap::IndexMap::new();
-        content.insert("application/json".to_string(), MediaType {
-            schema,
-            ..MediaType::default()
-        });
+        content.insert(
+            "application/json".to_string(),
+            MediaType {
+                schema,
+                ..MediaType::default()
+            },
+        );
         self.request_body = Some(RefOr::Item(RequestBody {
             content,
             required: true,
             ..RequestBody::default()
         }));
     }
+
 }
 
 #[cfg(test)]
@@ -114,7 +137,7 @@ mod tests {
                     default: None,
                     responses: {
                         let mut map = IndexMap::new();
-                        map.insert(StatusCode::Code(200), RefOr::ref_("test"));
+                        map.insert(axum::http::StatusCode::OK.as_u16(), RefOr::ref_("test"));
                         map
                     },
                     ..Default::default()
